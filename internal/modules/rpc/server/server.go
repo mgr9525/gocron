@@ -1,7 +1,9 @@
 package server
 
 import (
-	"net"
+	"encoding/json"
+	hbtp "github.com/mgr9525/HyperByte-Transfer-Protocol"
+	"github.com/ouqiang/gocron/internal/models"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,8 +14,6 @@ import (
 	"github.com/ouqiang/gocron/internal/modules/utils"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/context"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 )
 
@@ -50,8 +50,33 @@ func (s Server) Run(ctx context.Context, req *pb.TaskRequest) (*pb.TaskResponse,
 	return resp, nil
 }
 
+func hbptRunFun(c *hbtp.Context) {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Error(err)
+		}
+	}()
+	if !utils.AllHbtpAuthCheck(c) {
+		return
+	}
+	req := &models.HbtpRequest{}
+	err := json.Unmarshal(c.BodyBytes(), req)
+	if err != nil {
+		c.ResStringf(hbtp.ResStatusErr, "hbtp request json err:%v", err)
+		return
+	}
+	log.Infof("execute cmd start: [id: %d cmd: %s]", req.Id, req.Command)
+	output, err := utils.ExecShell(context.TODO(), req.Command)
+	if err != nil {
+		c.ResStringf(hbtp.ResStatusErr, "shell exec err:%v", err)
+		return
+	}
+	log.Infof("execute cmd end: [id: %d cmd: %s err: %v]", req.Id, req.Command, err)
+	c.ResString(hbtp.ResStatusOk, output)
+}
+
 func Start(addr string, enableTLS bool, certificate auth.Certificate) {
-	l, err := net.Listen("tcp", addr)
+	/*l, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -68,14 +93,19 @@ func Start(addr string, enableTLS bool, certificate auth.Certificate) {
 		opts = append(opts, opt)
 	}
 	server := grpc.NewServer(opts...)
-	pb.RegisterTaskServer(server, Server{})
+	pb.RegisterTaskServer(server, Server{})*/
 	log.Infof("server listen on %s", addr)
 
+	ctx, cncl := context.WithCancel(context.Background())
+	hbpserv := hbtp.NewEngine(ctx)
+	hbpserv.RegFun(1, hbptRunFun)
 	go func() {
-		err = server.Serve(l)
+		//err = server.Serve(l)
+		err := hbpserv.Run(addr)
 		if err != nil {
 			log.Fatal(err)
 		}
+
 	}()
 
 	c := make(chan os.Signal, 1)
@@ -88,7 +118,7 @@ func Start(addr string, enableTLS bool, certificate auth.Certificate) {
 			log.Infoln("收到终端断开信号, 忽略")
 		case syscall.SIGINT, syscall.SIGTERM:
 			log.Info("应用准备退出")
-			server.GracefulStop()
+			cncl()
 			return
 		}
 	}

@@ -12,6 +12,7 @@ type TaskProtocol int8
 
 const (
 	TaskHTTP TaskProtocol = iota + 1 // HTTP协议
+	TaskHBTP                         // HBTP方式执行命令
 	TaskRPC                          // RPC方式执行命令
 )
 

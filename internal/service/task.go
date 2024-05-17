@@ -2,7 +2,12 @@ package service
 
 import (
 	"fmt"
+	hbtp "github.com/mgr9525/HyperByte-Transfer-Protocol"
+	ruisUtil "github.com/mgr9525/go-ruisutil"
+	"github.com/ouqiang/gocron/internal/modules/utils"
+	"golang.org/x/net/context"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -239,6 +244,75 @@ func (h *HTTPHandler) Run(taskModel models.Task, taskUniqueId int64) (result str
 	return resp.Body, err
 }
 
+// HBTP调用执行任务
+type HBTPHandler struct{}
+
+func (h *HBTPHandler) exec(host string, port int, ishbp bool, m *models.HbtpRequest) (string, error) {
+	var req *hbtp.Request
+	if ishbp {
+		conn, err := utils.HbproxyConn(host, port, nil)
+		if err != nil {
+			return "", err
+		}
+		req = hbtp.NewConnRequest(conn, 1, time.Second*5)
+	} else {
+		req = hbtp.NewRequest(fmt.Sprintf("%s:%d", host, port), 1, time.Second*5)
+	}
+	secrets := os.Getenv("GOCRON_RUIS_SECRET")
+	times := time.Now().Format(time.RFC3339Nano)
+	random := ruisUtil.RandomString(20)
+	req.SetArg("secrets", secrets)
+	req.SetArg("times", times)
+	req.SetArg("random", random)
+	signs := ruisUtil.Md5String(secrets + random + times + utils.AllHbtpMD5Token)
+	req.SetArg("sign", signs)
+	req.SetVersion(2)
+	res, err := req.Do(context.TODO(), m)
+	if err != nil {
+		return "", err
+	}
+	defer res.Close()
+	conts := string(res.BodyBytes())
+	if res.Code() != hbtp.ResStatusOk {
+		return "", fmt.Errorf("hbtp do err(%d):%s", res.Code(), conts)
+	}
+	return conts, nil
+}
+func (h *HBTPHandler) Run(taskModel models.Task, taskUniqueId int64) (result string, err error) {
+	taskRequest := &models.HbtpRequest{}
+	taskRequest.Timeout = taskModel.Timeout
+	taskRequest.Command = taskModel.Command
+	taskRequest.Id = taskUniqueId
+	resultChan := make(chan TaskResult, len(taskModel.Hosts))
+	for _, taskHost := range taskModel.Hosts {
+		go func(th models.TaskHostDetail) {
+			ishbp := strings.HasPrefix(th.Name, "hbproxy:")
+			hosts := strings.Replace(th.Name, "hbproxy:", "", 1)
+			output, err := h.exec(hosts, th.Port, ishbp, taskRequest)
+			errorMessage := ""
+			if err != nil {
+				errorMessage = err.Error()
+			}
+			outputMessage := fmt.Sprintf("主机: [%s-%s:%d]\n%s\n%s\n\n",
+				th.Alias, th.Name, th.Port, errorMessage, output,
+			)
+			resultChan <- TaskResult{Err: err, Result: outputMessage}
+		}(taskHost)
+	}
+
+	var aggregationErr error = nil
+	aggregationResult := ""
+	for i := 0; i < len(taskModel.Hosts); i++ {
+		taskResult := <-resultChan
+		aggregationResult += taskResult.Result
+		if taskResult.Err != nil {
+			aggregationErr = taskResult.Err
+		}
+	}
+
+	return aggregationResult, aggregationErr
+}
+
 // RPC调用执行任务
 type RPCHandler struct{}
 
@@ -354,6 +428,8 @@ func createHandler(taskModel models.Task) Handler {
 		handler = new(HTTPHandler)
 	case models.TaskRPC:
 		handler = new(RPCHandler)
+	case models.TaskHBTP:
+		handler = new(HBTPHandler)
 	}
 
 	return handler
@@ -456,7 +532,7 @@ func SendNotification(taskModel models.Task, taskResult TaskResult) {
 		"output":           taskResult.Result,
 		"status":           statusName,
 		"task_id":          taskModel.Id,
-		"remark":  			taskModel.Remark,
+		"remark":           taskModel.Remark,
 	}
 	notify.Push(msg)
 }
