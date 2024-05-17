@@ -4,6 +4,7 @@ import (
 	"fmt"
 	ruisUtil "github.com/mgr9525/go-ruisutil"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -65,7 +66,7 @@ func HbproxyConns(proxyHost string, lmt *ProxyLimit, locals ...string) (net.Conn
 var AllHbtpMD5Token = "ETJFGQ5KLSJFXXYW5QVRIBU0BNNYDTNM"
 
 func AllHbtpAuthCheck(c *hbtp.Context) bool {
-	secrets := c.Args().Get("secrets")
+	secrets := os.Getenv("GOCRON_RUIS_SECRET")
 	times := c.Args().Get("times")
 	random := c.Args().Get("random")
 	sign := c.Args().Get("sign")

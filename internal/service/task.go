@@ -261,7 +261,6 @@ func (h *HBTPHandler) exec(host string, port int, ishbp bool, m *models.HbtpRequ
 	secrets := os.Getenv("GOCRON_RUIS_SECRET")
 	times := time.Now().Format(time.RFC3339Nano)
 	random := ruisUtil.RandomString(20)
-	req.SetArg("secrets", secrets)
 	req.SetArg("times", times)
 	req.SetArg("random", random)
 	signs := ruisUtil.Md5String(secrets + random + times + utils.AllHbtpMD5Token)
