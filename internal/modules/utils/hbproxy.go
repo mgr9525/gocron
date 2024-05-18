@@ -27,7 +27,11 @@ type ProxyLimit struct {
 }
 
 func HbproxyConn(node string, port int, lmt *ProxyLimit, locals ...string) (net.Conn, error) {
-	req := hbtp.NewRequest("localhost:6574", 2, time.Second*5)
+	apihost := os.Getenv("GOCRON_RUIS_HBPAPI")
+	if apihost == "" {
+		apihost = "localhost:6574"
+	}
+	req := hbtp.NewRequest(apihost, 2, time.Second*5)
 	req.Command("NodeProxy")
 	req.SetVersion(2)
 	ifo := &hbproxyInfo{Limit: lmt}
