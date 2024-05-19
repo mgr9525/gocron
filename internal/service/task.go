@@ -390,9 +390,10 @@ func createHandler(taskModel models.Task) Handler {
 	case models.TaskHTTP:
 		handler = new(HTTPHandler)
 	case models.TaskRPC:
-		handler = new(RPCHandler)
-	case models.TaskHBTP:
+		//handler = new(RPCHandler)
 		handler = new(HBTPHandler)
+		//case models.TaskHBTP:
+		//	handler = new(HBTPHandler)
 	}
 
 	return handler
