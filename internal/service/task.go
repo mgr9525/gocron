@@ -2,12 +2,8 @@ package service
 
 import (
 	"fmt"
-	hbtp "github.com/mgr9525/HyperByte-Transfer-Protocol"
-	ruisUtil "github.com/mgr9525/go-ruisutil"
-	"github.com/ouqiang/gocron/internal/modules/utils"
-	"golang.org/x/net/context"
+	"github.com/ouqiang/gocron/internal/modules/hbtps"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -247,36 +243,6 @@ func (h *HTTPHandler) Run(taskModel models.Task, taskUniqueId int64) (result str
 // HBTP调用执行任务
 type HBTPHandler struct{}
 
-func (h *HBTPHandler) exec(host string, port int, ishbp bool, m *models.HbtpRequest) (string, error) {
-	var req *hbtp.Request
-	if ishbp {
-		conn, err := utils.HbproxyConn(host, port, nil)
-		if err != nil {
-			return "", err
-		}
-		req = hbtp.NewConnRequest(conn, 1, time.Second*5)
-	} else {
-		req = hbtp.NewRequest(fmt.Sprintf("%s:%d", host, port), 1, time.Second*5)
-	}
-	secrets := os.Getenv("GOCRON_RUIS_SECRET")
-	times := time.Now().Format(time.RFC3339Nano)
-	random := ruisUtil.RandomString(20)
-	req.SetArg("times", times)
-	req.SetArg("random", random)
-	signs := ruisUtil.Md5String(secrets + random + times + utils.AllHbtpMD5Token)
-	req.SetArg("sign", signs)
-	req.SetVersion(2)
-	res, err := req.Do(context.TODO(), m)
-	if err != nil {
-		return "", err
-	}
-	defer res.Close()
-	conts := string(res.BodyBytes())
-	if res.Code() != hbtp.ResStatusOk {
-		return "", fmt.Errorf("hbtp do err(%d):%s", res.Code(), conts)
-	}
-	return conts, nil
-}
 func (h *HBTPHandler) Run(taskModel models.Task, taskUniqueId int64) (result string, err error) {
 	taskRequest := &models.HbtpRequest{}
 	taskRequest.Timeout = taskModel.Timeout
@@ -285,9 +251,7 @@ func (h *HBTPHandler) Run(taskModel models.Task, taskUniqueId int64) (result str
 	resultChan := make(chan TaskResult, len(taskModel.Hosts))
 	for _, taskHost := range taskModel.Hosts {
 		go func(th models.TaskHostDetail) {
-			ishbp := strings.HasPrefix(th.Name, "hbproxy:")
-			hosts := strings.Replace(th.Name, "hbproxy:", "", 1)
-			output, err := h.exec(hosts, th.Port, ishbp, taskRequest)
+			output, err := hbtps.Exec(th.Name, th.Port, taskRequest)
 			errorMessage := ""
 			if err != nil {
 				errorMessage = err.Error()

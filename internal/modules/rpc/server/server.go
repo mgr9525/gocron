@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	hbtp "github.com/mgr9525/HyperByte-Transfer-Protocol"
 	"github.com/ouqiang/gocron/internal/models"
+	"github.com/ouqiang/gocron/internal/modules/hbtps"
 	"os"
 	"os/signal"
 	"syscall"
@@ -56,7 +57,7 @@ func hbptRunFun(c *hbtp.Context) {
 			log.Error(err)
 		}
 	}()
-	if !utils.AllHbtpAuthCheck(c) {
+	if !hbtps.AllHbtpAuthCheck(c) {
 		return
 	}
 	req := &models.HbtpRequest{}

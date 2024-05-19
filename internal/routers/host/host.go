@@ -2,15 +2,14 @@ package host
 
 import (
 	"fmt"
+	"github.com/ouqiang/gocron/internal/modules/hbtps"
 	"strconv"
 	"strings"
 
 	"github.com/go-macaron/binding"
 	"github.com/ouqiang/gocron/internal/models"
 	"github.com/ouqiang/gocron/internal/modules/logger"
-	"github.com/ouqiang/gocron/internal/modules/rpc/client"
 	"github.com/ouqiang/gocron/internal/modules/rpc/grpcpool"
-	"github.com/ouqiang/gocron/internal/modules/rpc/proto"
 	"github.com/ouqiang/gocron/internal/modules/utils"
 	"github.com/ouqiang/gocron/internal/routers/base"
 	"github.com/ouqiang/gocron/internal/service"
@@ -182,10 +181,15 @@ func Ping(ctx *macaron.Context) string {
 		return json.CommonFailure("主机不存在", err)
 	}
 
-	taskReq := &rpc.TaskRequest{}
+	/*taskReq := &rpc.TaskRequest{}
 	taskReq.Command = testConnectionCommand
 	taskReq.Timeout = testConnectionTimeout
-	output, err := client.Exec(hostModel.Name, hostModel.Port, taskReq)
+	output, err := client.Exec(hostModel.Name, hostModel.Port, taskReq)*/
+	taskRequest := &models.HbtpRequest{}
+	taskRequest.Timeout = testConnectionTimeout
+	taskRequest.Command = testConnectionCommand
+	//taskRequest.Id = taskUniqueId
+	output, err := hbtps.Exec(hostModel.Name, hostModel.Port, taskRequest)
 	if err != nil {
 		return json.CommonFailure("连接失败-"+err.Error()+" "+output, err)
 	}
