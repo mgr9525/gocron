@@ -27,13 +27,23 @@ type ProxyLimit struct {
 }
 
 func HbproxyConn(node string, port int, lmt *ProxyLimit, locals ...string) (net.Conn, error) {
-	apihost := os.Getenv("GOCRON_RUIS_HBPAPI")
+	apihost := os.Getenv("GOCRON_RUIS_HBPAPI_HOST")
+	apikey := os.Getenv("GOCRON_RUIS_HBPAPI_KEY")
 	if apihost == "" {
 		apihost = "localhost:6574"
 	}
+	cmds := "NodeProxy"
 	req := hbtp.NewRequest(apihost, 2, time.Second*5)
-	req.Command("NodeProxy")
+	req.Command(cmds)
 	req.SetVersion(2)
+	if apikey != "" {
+		times := time.Now().Format(time.RFC3339Nano)
+		random := ruisUtil.RandomString(20)
+		signs := ruisUtil.Md5String(cmds + times + random + apikey)
+		req.SetArg("times", times)
+		req.SetArg("random", random)
+		req.SetArg("sign", signs)
+	}
 	ifo := &hbproxyInfo{Limit: lmt}
 	var lcs *string = nil
 	if len(locals) > 0 && locals[0] != "" {
